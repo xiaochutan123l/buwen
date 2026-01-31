@@ -5,8 +5,10 @@
 2. [构建生产版本](#构建生产版本)
 3. [树莓派部署方案](#树莓派部署方案)
 4. [云服务器 Docker 部署](#云服务器-docker-部署)
-5. [数据迁移](#数据迁移)
-6. [常见问题](#常见问题)
+5. [云服务器多站点部署](#云服务器多站点部署)
+6. [更新应用](#更新应用)
+7. [数据迁移](#数据迁移)
+8. [常见问题](#常见问题)
 
 ---
 
@@ -254,7 +256,166 @@ pm2 delete buwen
 
 ---
 
-## 云服务器 Docker 部署
+## 云服务器多站点部署
+
+> **适用场景**：服务器上已有其他网站（如个人博客在 8080 端口），想同时部署步纹
+
+### 方案一：使用不同端口 + Nginx 反向代理（推荐）
+
+假设你的服务器已有：
+- 个人网站：`yourdomain.com` → 端口 8080
+- 现在要添加步纹：`buwen.yourdomain.com` → 端口 3000
+
+**步骤 1：部署步纹到 3000 端口**
+
+```bash
+# 克隆项目
+git clone https://github.com/xiaochutan123l/buwen.git
+cd buwen
+
+# Docker 部署（默认 3000 端口）
+docker compose up -d --build
+
+# 或者非 Docker 部署
+npm install && npm run build
+pm2 start npm --name "buwen" -- start
+```
+
+**步骤 2：配置 Nginx 反向代理**
+
+```bash
+sudo nano /etc/nginx/sites-available/buwen
+```
+
+添加配置：
+
+```nginx
+server {
+    listen 80;
+    server_name buwen.yourdomain.com;
+
+    location / {
+        proxy_pass http://127.0.0.1:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_cache_bypass $http_upgrade;
+    }
+}
+```
+
+**步骤 3：启用配置并申请 HTTPS**
+
+```bash
+# 启用站点
+sudo ln -s /etc/nginx/sites-available/buwen /etc/nginx/sites-enabled/
+
+# 测试配置
+sudo nginx -t
+
+# 重载 Nginx
+sudo systemctl reload nginx
+
+# 使用 Certbot 申请免费 SSL 证书
+sudo certbot --nginx -d buwen.yourdomain.com
+```
+
+**步骤 4：DNS 配置**
+
+在你的域名服务商添加 A 记录：
+```
+buwen.yourdomain.com → 你的服务器IP
+```
+
+现在可以通过 `https://buwen.yourdomain.com` 访问步纹了！
+
+### 方案二：使用子路径
+
+如果不想用子域名，可以把步纹放在主站的子路径下，如 `yourdomain.com/buwen`
+
+```nginx
+# 在现有的 server 块中添加
+location /buwen/ {
+    proxy_pass http://127.0.0.1:3000/;
+    proxy_http_version 1.1;
+    proxy_set_header Upgrade $http_upgrade;
+    proxy_set_header Connection 'upgrade';
+    proxy_set_header Host $host;
+    proxy_cache_bypass $http_upgrade;
+}
+```
+
+> ⚠️ 注意：Next.js 需要配置 basePath，修改 `next.config.js`：
+> ```js
+> module.exports = { basePath: '/buwen' }
+> ```
+
+### 方案三：使用不同端口直接访问
+
+最简单但不推荐用于生产：
+
+```bash
+# 修改 docker-compose.yml 使用其他端口如 3001
+ports:
+  - "3001:3000"
+```
+
+然后通过 `http://yourdomain.com:3001` 访问（需要在防火墙开放端口）
+
+---
+
+## 更新应用
+
+### Docker 部署更新
+
+```bash
+cd buwen
+
+# 拉取最新代码
+git pull origin main
+
+# 重新构建并启动（数据会保留）
+docker compose up -d --build
+
+# 清理旧镜像（可选）
+docker image prune -f
+```
+
+### 非 Docker 部署更新
+
+**方法一：使用 update.sh 脚本**
+
+```bash
+cd buwen
+./update.sh
+```
+
+**方法二：手动更新**
+
+```bash
+cd buwen
+
+# 拉取最新代码
+git pull origin main
+
+# 安装依赖（如果有新依赖）
+npm install
+
+# 重新构建
+npm run build
+
+# 重启服务
+pm2 restart buwen
+```
+
+### 更新时数据会丢失吗？
+
+**不会！** 数据保存在 `data/buwen-data.json` 文件中：
+- Docker：通过 volumes 挂载，容器重建数据不丢失
+- 非 Docker：数据在项目目录下，git pull 不会覆盖
 
 ### 适用场景
 
@@ -412,7 +573,8 @@ services:
 ## 技术栈
 
 - **前端框架**: Next.js 14 (React)
-- **状态管理**: Zustand (持久化到 localStorage)
+- **状态管理**: Zustand (服务器端持久化)
+- **数据存储**: JSON 文件 (服务器端 `data/buwen-data.json`)
 - **拖拽库**: @dnd-kit
 - **样式**: Tailwind CSS
 - **日期处理**: date-fns
@@ -420,4 +582,4 @@ services:
 
 ---
 
-*部署指南版本: v1.0*
+*部署指南版本: v2.0*
