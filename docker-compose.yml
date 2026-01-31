@@ -1,0 +1,9 @@
+services:
+  buwen:
+    build: .
+    container_name: buwen
+    ports:
+      - "3000:3000"
+    restart: unless-stopped
+    environment:
+      - NODE_ENV=production
