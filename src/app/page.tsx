@@ -20,6 +20,7 @@ import {
   Toolbar,
   SettingsModal,
   DndProvider,
+  DataLoader,
 } from '@/components';
 
 /**
@@ -143,7 +144,9 @@ function MainApp() {
 export default function HomePage() {
   return (
     <I18nProvider>
-      <MainApp />
+      <DataLoader>
+        <MainApp />
+      </DataLoader>
     </I18nProvider>
   );
 }

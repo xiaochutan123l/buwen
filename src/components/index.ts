@@ -6,3 +6,4 @@ export { Toolbar } from './Toolbar';
 export { SettingsModal } from './SettingsModal';
 export { DndProvider } from './DndProvider';
 export { TaskEditModal } from './TaskEditModal';
+export { DataLoader } from './DataLoader';

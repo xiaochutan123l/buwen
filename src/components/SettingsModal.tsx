@@ -1,9 +1,9 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useBuwenStore } from '@/store/useBuwenStore';
 import { useI18n } from '@/i18n/I18nProvider';
-import { X, Plus, Trash2, Pencil, Check, Palette } from 'lucide-react';
+import { X, Plus, Trash2, Pencil, Check, Palette, Download, Upload } from 'lucide-react';
 
 // 预设主题色 - 简洁的单色主题
 const THEME_COLORS = [
@@ -23,8 +23,9 @@ interface SettingsModalProps {
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose }) => {
-  const { settings, updateSettings, tags, addTag, updateTag, deleteTag } = useBuwenStore();
+  const { settings, updateSettings, tags, addTag, updateTag, deleteTag, projects, scheduledTasks, isSyncing, lastSyncTime, saveToServer, loadFromServer } = useBuwenStore();
   const { t, language, setLanguage } = useI18n();
+  const fileInputRef = useRef<HTMLInputElement>(null);
   
   // 标签管理状态
   const [newTagName, setNewTagName] = useState('');
@@ -32,11 +33,75 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
   const [editingTagId, setEditingTagId] = useState<string | null>(null);
   const [editingTagName, setEditingTagName] = useState('');
   const [editingTagColor, setEditingTagColor] = useState('');
+  const [importStatus, setImportStatus] = useState<'idle' | 'success' | 'error'>('idle');
 
   if (!isOpen) return null;
 
   // 获取当前主题色
   const currentThemeColor = settings.customColors?.[0] || '#4ECDC4';
+
+  // 导出数据 - 从服务器获取并下载
+  const handleExportData = async () => {
+    try {
+      const response = await fetch('/api/data');
+      const data = await response.json();
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `buwen-backup-${new Date().toISOString().split('T')[0]}.json`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error('导出失败:', error);
+    }
+  };
+
+  // 导入数据 - 上传到服务器
+  const handleImportData = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const content = e.target?.result as string;
+        const data = JSON.parse(content);
+        
+        // 验证数据结构
+        if (data.state && (data.state.projects || data.state.scheduledTasks || data.state.tags)) {
+          // 发送到服务器
+          const response = await fetch('/api/data', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: content,
+          });
+          
+          if (response.ok) {
+            setImportStatus('success');
+            // 刷新页面以加载新数据
+            setTimeout(() => {
+              window.location.reload();
+            }, 1000);
+          } else {
+            setImportStatus('error');
+          }
+        } else {
+          setImportStatus('error');
+        }
+      } catch (err) {
+        setImportStatus('error');
+      }
+    };
+    reader.readAsText(file);
+    
+    // 重置 input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
 
   const handleSelectTheme = (color: string) => {
     updateSettings({ customColors: [color] });
@@ -279,13 +344,63 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
             </div>
           </div>
 
-          {/* 数据说明 */}
-          <div className="pt-2 border-t border-gray-100">
-            <p className="text-xs text-gray-400 text-center">
-              {language === 'zh' 
-                ? '📦 数据保存在浏览器本地存储中' 
-                : '📦 Data is saved in browser local storage'}
-            </p>
+          {/* 数据导出/导入 */}
+          <div className="pt-4 border-t border-gray-100">
+            <h3 className="text-sm font-medium text-gray-700 mb-3">
+              {language === 'zh' ? '数据备份' : 'Data Backup'}
+            </h3>
+            <div className="flex gap-2">
+              <button
+                onClick={handleExportData}
+                className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-blue-50 text-blue-600 hover:bg-blue-100 rounded-lg transition-colors text-sm"
+              >
+                <Download className="w-4 h-4" />
+                {language === 'zh' ? '导出数据' : 'Export'}
+              </button>
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="flex-1 flex items-center justify-center gap-2 px-3 py-2 bg-green-50 text-green-600 hover:bg-green-100 rounded-lg transition-colors text-sm"
+              >
+                <Upload className="w-4 h-4" />
+                {language === 'zh' ? '导入数据' : 'Import'}
+              </button>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".json"
+                onChange={handleImportData}
+                className="hidden"
+              />
+            </div>
+            {importStatus === 'success' && (
+              <p className="text-xs text-green-600 mt-2 text-center">
+                {language === 'zh' ? '✓ 导入成功，正在刷新...' : '✓ Import successful, refreshing...'}
+              </p>
+            )}
+            {importStatus === 'error' && (
+              <p className="text-xs text-red-500 mt-2 text-center">
+                {language === 'zh' ? '✗ 导入失败，请检查文件格式' : '✗ Import failed, please check file format'}
+              </p>
+            )}
+            <div className="text-xs text-gray-400 text-center mt-3 space-y-1">
+              <p>
+                {language === 'zh' 
+                  ? '🖥️ 数据保存在服务器端，支持多设备同步' 
+                  : '🖥️ Data is saved on the server, supports multi-device sync'}
+              </p>
+              {isSyncing && (
+                <p className="text-blue-500">
+                  {language === 'zh' ? '正在同步...' : 'Syncing...'}
+                </p>
+              )}
+              {lastSyncTime && !isSyncing && (
+                <p>
+                  {language === 'zh' 
+                    ? `上次同步: ${new Date(lastSyncTime).toLocaleString('zh-CN')}`
+                    : `Last sync: ${new Date(lastSyncTime).toLocaleString('en-US')}`}
+                </p>
+              )}
+            </div>
           </div>
         </div>
 
