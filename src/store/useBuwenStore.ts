@@ -210,7 +210,7 @@ export const useBuwenStore = create<BuwenStore>()((set, get) => ({
   loadFromServer: async () => {
     set({ isLoading: true, syncError: null });
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_PATH || ''}/api/data`);
+      const response = await fetch('/buwen/api/data');
       if (!response.ok) throw new Error('加载数据失败');
       
       const data = await response.json();
@@ -252,7 +252,7 @@ export const useBuwenStore = create<BuwenStore>()((set, get) => ({
         version: 1,
       };
       
-      const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_PATH || ''}/api/data`, {
+      const response = await fetch('/buwen/api/data', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(dataToSave),

@@ -43,7 +43,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
   // 导出数据 - 从服务器获取并下载
   const handleExportData = async () => {
     try {
-      const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_PATH || ''}/api/data`);
+      const response = await fetch('/buwen/api/data');
       const data = await response.json();
       const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
@@ -73,7 +73,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({ isOpen, onClose })
         // 验证数据结构
         if (data.state && (data.state.projects || data.state.scheduledTasks || data.state.tags)) {
           // 发送到服务器
-          const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_PATH || ''}/api/data`, {
+          const response = await fetch('/buwen/api/data', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: content,
